@@ -13,6 +13,7 @@ app.get("/", function(req, res) {
 
 io.on("connection", socket => {
     let clientId = socket.id;
+    console.log(clientId);
 
     socket.on("disconnect", () => {
         let findUser = users => {
