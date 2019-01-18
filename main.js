@@ -13,7 +13,33 @@ app.get("/", function(req, res) {
 
 io.on("connection", socket => {
     let clientId = socket.id;
-    console.log(clientId);
+    
+    socket.on("logIn", user => {
+        if (typeof user == "undefined" || typeof user.user == "undefined")
+            socket.disconnect();
+        
+        chat.users.addUser({ clientId, user });
+        connected(socket, user);
+    });
+
+});
+
+http.listen(port, function() {
+    console.log(`Server app listening on port ${port}`);
+});
+
+// Notifications
+let notify = (socket, type, text) => {
+    socket.emit('notification', {type, text});
+}
+
+let connected = (socket, user) => {
+
+    // Notify about new user
+    notify(socket.broadcast, "info", `Użytkownik ${user.user} połączył się z czatem.`);
+    socket.broadcast.emit('usersOnline-add', {name: user.user, status: "online"});
+    
+    socket.emit('usersOnline-fetch', chat.users.getOnline());
 
     socket.on("disconnect", () => {
         let findUser = users => {
@@ -24,7 +50,14 @@ io.on("connection", socket => {
             users => users.id == socket.id
         );
 
-        if (typeof user != "undefined") chat.users.usersOnline.splice(user, 1);
+        if (typeof user != "undefined") {
+            let username = chat.users.usersOnline[user].name;
+            chat.users.usersOnline.splice(user, 1);
+
+            // Notify about disconnection
+            notify(socket.broadcast, "info", `Użytkownik ${username} rozłączył się z czatem.`);
+            socket.broadcast.emit('usersOnline-remove', {name: user.user, status: "offline"});
+        }
     });
 
     socket.on("chat-send", data => {
@@ -59,15 +92,4 @@ io.on("connection", socket => {
             });
         }
     });
-
-    socket.on("logIn", user => {
-        if (typeof user == "undefined" || typeof user.user == "undefined")
-            socket.disconnect();
-
-        chat.users.addUser({ clientId, user });
-    });
-});
-
-http.listen(port, function() {
-    console.log(`Server app listening on port ${port}`);
-});
+}
