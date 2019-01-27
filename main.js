@@ -4,6 +4,7 @@ const io = require("socket.io")(http);
 const chat = require("./chat");
 const processMessage = require("./chat_modules/processMessage");
 const moment = require("moment");
+const checkActive = require("./chat_modules/checkActive");
 
 const port = process.env.PORT || 3000;
 
@@ -11,17 +12,38 @@ app.get("/", function(req, res) {
     res.send("Server running");
 });
 
+// Check all users activity
+setInterval(() => {
+    checkActive.check(chat.users, io);
+}, 5000);
+
 io.on("connection", socket => {
+    console.log(chat.users.usersOnline);
+
     let clientId = socket.id;
-    
+
     socket.on("logIn", user => {
         if (typeof user == "undefined" || typeof user.user == "undefined")
             socket.disconnect();
-        
+
         chat.users.addUser({ clientId, user });
-        connected(socket, user);
     });
 
+    socket.on("getStatus", status => {
+        let user = chat.users.usersOnline.find(users => users.id == socket.id);
+        checkActive.setStatus(status, user);
+    });
+
+    socket.on("userReady", () => {
+        let user = chat.users.usersOnline.find(users => users.id == socket.id);
+
+        if (typeof user != "undefined") {
+            socket.emit("connectionStatus", { status: true });
+            connected(socket, user);
+        } else {
+            socket.emit("connectionStatus", { status: false });
+        }
+    });
 });
 
 http.listen(port, function() {
@@ -30,33 +52,36 @@ http.listen(port, function() {
 
 // Notifications
 let notify = (socket, type, text) => {
-    socket.emit('notification', {type, text});
-}
+    socket.emit("notification", { type, text });
+};
 
 let connected = (socket, user) => {
-
     // Notify about new user
-    notify(socket.broadcast, "info", `Użytkownik ${user.user} połączył się z czatem.`);
-    socket.broadcast.emit('usersOnline-add', {name: user.user, status: "online"});
-    
-    socket.emit('usersOnline-fetch', chat.users.getOnline());
+    notify(
+        socket.broadcast,
+        "info",
+        `Użytkownik ${user.name} połączył się z czatem.`
+    );
+
+    io.emit("usersOnline-fetch", chat.users.getOnline());
 
     socket.on("disconnect", () => {
-        let findUser = users => {
-            return users.id == socket;
-        };
-
         let user = chat.users.usersOnline.findIndex(
             users => users.id == socket.id
         );
 
-        if (typeof user != "undefined") {
+        if (typeof user != "undefined" && user != -1) {
             let username = chat.users.usersOnline[user].name;
             chat.users.usersOnline.splice(user, 1);
 
+            io.emit("usersOnline-fetch", chat.users.getOnline());
+
             // Notify about disconnection
-            notify(socket.broadcast, "info", `Użytkownik ${username} rozłączył się z czatem.`);
-            socket.broadcast.emit('usersOnline-remove', {name: user.user, status: "offline"});
+            notify(
+                socket.broadcast,
+                "info",
+                `Użytkownik ${username} rozłączył się z czatem.`
+            );
         }
     });
 
@@ -92,4 +117,4 @@ let connected = (socket, user) => {
             });
         }
     });
-}
+};
