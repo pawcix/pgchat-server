@@ -12,14 +12,16 @@ app.get("/", function(req, res) {
     res.send("Server running");
 });
 
+app.get("/status", (req, res) => {
+    res.send({ status: chat.serverStatus });
+});
+
 // Check all users activity
 setInterval(() => {
     checkActive.check(chat.users, io);
 }, 5000);
 
 io.on("connection", socket => {
-    console.log(chat.users.usersOnline);
-
     let clientId = socket.id;
 
     socket.on("logIn", user => {
@@ -44,10 +46,6 @@ io.on("connection", socket => {
             socket.emit("connectionStatus", { status: false });
         }
     });
-});
-
-http.listen(port, function() {
-    console.log(`Server app listening on port ${port}`);
 });
 
 // Notifications
@@ -118,3 +116,8 @@ let connected = (socket, user) => {
         }
     });
 };
+
+http.listen(port, function() {
+    console.log(`Server app listening on port ${port}`);
+    chat.serverStatus = 1;
+});
